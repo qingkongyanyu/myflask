@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>时珍·智析 · 校园数据仪表盘</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+</head>
+<body>
+    <div class="dashboard-container">
+        <header class="header">
+            <div class="logo-area">
+                <h1 class="glow-text">时珍·智析</h1>
+                <div class="subtitle">贵州中医药大学时珍学院</div>
+            </div>
+            <div class="module-selector">
+                <label class="select-label">📌 切换模块</label>
+                <select id="moduleSelect" class="cyber-select">
+                    <option value="energy">⚡ 校园能耗实时监控</option>
+                    <option value="score">📊 大数据专业成绩分析</option>
+                    <option value="health">❤️ 校园跑健康数据监控</option>
+                    <option value="market">🛒 桂苑超市销售分析</option>
+                </select>
+            </div>
+            <div class="refresh-indicator">
+                <span>⚡ 实时数据</span>
+                <span class="pulse"></span>
+            </div>
+        </header>
+
+        <!-- 成绩模块筛选器（默认隐藏） -->
+        <div id="scoreFilters" class="score-filters" style="display: none;">
+            <div class="filter-group">
+                <label>📌 班级</label>
+                <select id="classFilter" class="cyber-select small">
+                    <option value="all">全部班级</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>📊 分数段</label>
+                <select id="scoreRangeFilter" class="cyber-select small">
+                    <option value="all">全部</option>
+                    <option value="low">低于70分</option>
+                    <option value="mid">70-85分</option>
+                    <option value="high">85分以上</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>⚠️ 挂科情况</label>
+                <select id="failFilter" class="cyber-select small">
+                    <option value="all">全部</option>
+                    <option value="has_fail">有挂科</option>
+                    <option value="no_fail">无挂科</option>
+                </select>
+            </div>
+            <button id="applyFilterBtn" class="cyber-button">应用筛选</button>
+        </div>
+
+        <div id="dashboardGrid" class="dashboard-grid">
+            <div class="loading-placeholder">✨ 加载中...</div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+    <script>
+        // ---------- 全局定时器 ----------
+        let energyJitterTimer = null;      // 2秒微调KPI数字
+        let energyFullRefreshTimer = null; // 30秒全量刷新图表
+
+        // ---------- 加载模块 ----------
+        function loadModule(module) {
+            const grid = document.getElementById('dashboardGrid');
+            grid.innerHTML = '<div class="loading-placeholder">✨ 加载中...</div>';
+             // 清理健康模块定时器
+            if (window.clearHealthTimers) window.clearHealthTimers();
+            // 清除所有能耗定时器（切换到成绩模块时）
+            if (energyJitterTimer) clearInterval(energyJitterTimer);
+            if (energyFullRefreshTimer) clearInterval(energyFullRefreshTimer);
+            energyJitterTimer = null;
+            energyFullRefreshTimer = null;
+
+            // 默认隐藏筛选器
+            document.getElementById('scoreFilters').style.display = 'none';
+
+            fetch(`/api/${module}`)
+                .then(res => {
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                    return res.json();
+                })
+                .then(data => {
+                    if (module === 'energy') {
+                        renderEnergy(data);
+                        startEnergyRealTimeUpdates();
+                    } else if (module === 'score') {
+                        // 显示筛选器
+                        document.getElementById('scoreFilters').style.display = 'flex';
+                        // 获取班级列表并填充下拉框
+                        fetch('/api/score?class=all')
+                            .then(res => res.json())
+                            .then(scoreData => {
+                                if (scoreData.classes) {
+                                    const select = document.getElementById('classFilter');
+                                    select.innerHTML = '<option value="all">全部班级</option>';
+                                    scoreData.classes.forEach(cls => {
+                                        select.innerHTML += `<option value="${cls}">${cls}</option>`;
+                                    });
+                                }
+                                renderScore(scoreData);
+                            })
+                            .catch(err => {
+                                grid.innerHTML = `<div class="error-card">❌ 加载失败: ${err.message}</div>`;
+                            });
+                    }else if (module === 'health') {
+                        renderHealth(data);
+                    }else if (module === 'market') {
+                        renderMarket(data);
+                    }
+                })
+                .catch(err => {
+                    grid.innerHTML = `<div class="error-card">❌ 加载失败: ${err.message}</div>`;
+                });
+        }
+
+        // ---------- 能耗实时更新（2秒微调 + 30秒全量刷新） ----------
+        function startEnergyRealTimeUpdates() {
+            // 1. 每2秒微调KPI数字（仅前端动画）
+            energyJitterTimer = setInterval(() => {
+                const elecEl = document.getElementById('kpi-elec');
+                const waterEl = document.getElementById('kpi-water');
+                const netEl = document.getElementById('kpi-net');
+                if (elecEl) {
+                    elecEl.innerText = (parseFloat(elecEl.innerText) * (1 + (Math.random() - 0.5) * 0.01)).toFixed(1);
+                }
+                if (waterEl) {
+                    waterEl.innerText = (parseFloat(waterEl.innerText) * (1 + (Math.random() - 0.5) * 0.01)).toFixed(1);
+                }
+                if (netEl) {
+                    netEl.innerText = (parseFloat(netEl.innerText) * (1 + (Math.random() - 0.5) * 0.01)).toFixed(1);
+                }
+            }, 2000);
+
+            // 2. 每30秒全量刷新
+            energyFullRefreshTimer = setInterval(() => {
+                fetch('/api/energy')
+                    .then(res => res.json())
+                    .then(data => {
+                        document.getElementById('kpi-elec').innerText = data.cards.用电量.toFixed(1);
+                        document.getElementById('kpi-water').innerText = data.cards.用水量.toFixed(1);
+                        document.getElementById('kpi-net').innerText = data.cards.网流量.toFixed(1);
+
+                        const inst = window.chartInstances;
+                        if (inst) {
+                            inst.netTrend?.setOption({ series: [{ data: data.net_trend.data }] });
+                            inst.regionNet?.setOption({ series: [{ data: Object.values(data.region_net) }] });
+                            inst.elecTime?.setOption({ series: [{ data: ['早上','中午','晚上'].map(p => data.elec_by_time[p] || 0) }] });
+                            inst.elecRose?.setOption({ series: [{ data: data.elec_pie }] });
+                            inst.waterTrend?.setOption({ series: data.water_trend_series });
+                            inst.waterRank?.setOption({ series: [{ data: Object.values(data.water_rank) }] });
+                            inst.growth?.setOption({
+                                series: [
+                                    { data: data.growth.elec },
+                                    { data: data.growth.water },
+                                    { data: data.growth.net }
+                                ]
+                            });
+                            inst.loadRate?.setOption({ series: [{ data: Object.values(data.load_rate) }] });
+                        }
+
+                        const wrapper = document.getElementById('detailTableWrapper');
+                        if (wrapper) wrapper.innerHTML = generateDetailTable(data.detail);
+                    })
+                    .catch(err => console.error('能耗刷新失败:', err));
+            }, 30000);
+        }
+
+        // ---------- 筛选器事件绑定 ----------
+        document.addEventListener('DOMContentLoaded', function() {
+            const applyBtn = document.getElementById('applyFilterBtn');
+            if (applyBtn) {
+                applyBtn.addEventListener('click', function() {
+                    const classVal = document.getElementById('classFilter').value;
+                    const scoreVal = document.getElementById('scoreRangeFilter').value;
+                    const failVal = document.getElementById('failFilter').value;
+                    const url = `/api/score?class=${classVal}&score_range=${scoreVal}&fail=${failVal}`;
+
+                    document.getElementById('dashboardGrid').innerHTML = '<div class="loading-placeholder">✨ 加载中...</div>';
+                    fetch(url)
+                        .then(res => res.json())
+                        .then(data => {
+                            if (data.error) {
+                                document.getElementById('dashboardGrid').innerHTML = `<div class="error-card">❌ ${data.error}</div>`;
+                            } else {
+                                renderScore(data);
+                            }
+                        })
+                        .catch(err => {
+                            document.getElementById('dashboardGrid').innerHTML = `<div class="error-card">❌ 加载失败: ${err.message}</div>`;
+                        });
+                });
+            }
+        });
+
+        // ---------- 模块切换 ----------
+        document.getElementById('moduleSelect').addEventListener('change', e => loadModule(e.target.value));
+
+        // ---------- 默认加载能耗模块 ----------
+        window.onload = () => loadModule('energy');
+    </script>
+</body>
+</html>
