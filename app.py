@@ -3,11 +3,15 @@ import pandas as pd
 import numpy as np
 import os
 
+# 获取当前文件所在目录的绝对路径
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 app = Flask(__name__)
 
-ENERGY_CSV = 'data/水电网数据.csv'
+# 修改为绝对路径
+ENERGY_CSV = os.path.join(BASE_DIR, 'data/水电网数据.csv')
 # ---------- 新增：成绩数据加载 ----------
-SCORE_FILE = '2024-2025学年成绩（不含公共选修）23大数据.xlsx'
+SCORE_FILE = os.path.join(BASE_DIR, '2024-2025学年成绩（不含公共选修）23大数据.xlsx')
 score_df = None
 if os.path.exists(SCORE_FILE):
     try:
@@ -24,7 +28,7 @@ if os.path.exists(SCORE_FILE):
 else:
     print(f"⚠️ 成绩文件未找到: {SCORE_FILE}")
 # ---------- 新增：健康数据加载 ----------
-HEALTH_CSV = 'data/健康数据.csv'
+HEALTH_CSV = os.path.join(BASE_DIR, 'data/健康数据.csv')
 health_df = None
 if os.path.exists(HEALTH_CSV):
     health_df = pd.read_csv(HEALTH_CSV)
@@ -32,7 +36,7 @@ if os.path.exists(HEALTH_CSV):
 else:
     print("⚠️ 健康数据文件未找到，请先运行 data/generate_health.py")
 # ---------- 新增：超市数据加载 ----------
-MARKET_CSV = 'data/超市销售数据.csv'
+MARKET_CSV = os.path.join(BASE_DIR, 'data/超市销售数据.csv')
 market_df = None
 if os.path.exists(MARKET_CSV):
     market_df = pd.read_csv(MARKET_CSV)
